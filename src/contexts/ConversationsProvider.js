@@ -1,8 +1,8 @@
-import React, { useState, useContext, useCallback } from 'react'
+import React, { useState, useContext, useCallback, useEffect } from 'react'
 
 import useLocalStorage from '../hooks/useLocalStorage'
 import { useContacts } from './ContactsProvider'
-// import { useSocket } from './SocketProvider';
+import { useSocket } from './SocketProvider';
 
 const ConversationsContext = React.createContext()
 
@@ -14,6 +14,7 @@ export function ConversationsProvider({ id, children }) {
   const [conversations, setConversations] = useLocalStorage('conversations', [])
   const [selectedConversationIndex, setSelectedConversationIndex] = useState(0)
   const { contacts } = useContacts()
+  const socket = useSocket()
 
   function createConversation(recipients) {
     setConversations((prevConversations) => {
@@ -21,6 +22,7 @@ export function ConversationsProvider({ id, children }) {
     })
   }
 
+  // used useCallback so useEffect doesn't execute after every re-render
   const addMessageToConversation = useCallback(({ recipients, text, sender }) => {
     setConversations(prevConversations => {
       let madeChange = false
@@ -48,8 +50,16 @@ export function ConversationsProvider({ id, children }) {
     })
   }, [setConversations])
 
+  useEffect(() => {
+    if (socket == null) return
+
+    socket.on('receive-message', addMessageToConversation)
+
+    return () => socket.off('receive-message')
+  }, [socket, addMessageToConversation])
+
   function sendMessage(recipients, text) {
-    // socket.emit('send-message', { recipients, text })
+    socket.emit('send-message', { recipients, text })
 
     addMessageToConversation({ recipients, text, sender: id })
   }
@@ -62,8 +72,18 @@ export function ConversationsProvider({ id, children }) {
       const name = (contact && contact.name) || recipient
       return { id: recipient, name }
     })
+
+    const messages = conversation.messages.map(message => {
+      const contact = contacts.find(contact => {
+        return contact.id === message.sender
+      })
+      const name = (contact && contact.name) || message.sender
+      const fromMe = id === message.sender
+      return { ...message, senderName: name, fromMe }
+    })
+
     const selected = index === selectedConversationIndex
-    return { ...conversation, recipients, selected }
+    return { ...conversation, messages, recipients, selected }
   })
 
   const value = {
