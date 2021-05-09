@@ -6,6 +6,7 @@ function App() {
 
   return (
     <>
+      {id}
       <Login onIdSubmit={setId} />
     </>
   )
